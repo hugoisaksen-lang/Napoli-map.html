@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="no">
+<head>
+  <meta charset="utf-8" />
+  <title>Napoli – Pizza, museer, barer, utsikt, strender og ditt punkt</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- Leaflet CSS -->
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""
+  />
+  <style>
+    html, body, #map { height: 100%; margin: 0; }
+    .titlebar {
+      position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+      background: white; padding: 8px 12px; border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.15); font: 15px/1.3 system-ui, sans-serif;
+      z-index: 9999; white-space: nowrap;
+    }
+    /* ÉN, enkel tegnforklaring med fargede sirkler */
+    .legend {
+      position: absolute; bottom: 14px; left: 14px; z-index: 9999;
+      background: white; padding: 8px 10px; border-radius: 6px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.15); font: 14px/1.3 system-ui, sans-serif;
+    }
+    .legend .row { display: flex; align-items: center; margin: 4px 0; }
+    .legend .swatch {
+      width: 14px; height: 14px; border-radius: 50%; margin-right: 8px; border: 1px solid #0002;
+    }
+    .pizza  { background: #d83a3a; }
+    .museum { background: #2f70ff; }
+    .bar    { background: #9b59b6; }
+    .view   { background: #16a085; }
+    .beach  { background: #f39c12; }
+    .center { background: #777; }
+    .star-pin { font-size: 20px; line-height: 20px; transform: translate(-10px, -10px); text-shadow: 0 0 2px #0008; }
+    /* “Finn posisjon”-knapp */
+    .locate-btn {
+      position: absolute; top: 14px; right: 14px; z-index: 9999;
+      background: white; border: 1px solid #0002; padding: 8px 10px; border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.15); font: 14px system-ui, sans-serif; cursor: pointer;
+    }
+    .locate-btn:active { transform: translateY(1px); }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+
+  <div class="titlebar">Napoli – Pizza 🍕 • Museer 🏛 • Barer 🍸 • Utsikt 👀 • Strender 🏖 • Ditt punkt ⭐</div>
+
+  <button id="locate" class="locate-btn" title="Finn min posisjon">📍 Finn min posisjon</button>
+
+  <!-- Én tegnforklaring (kun farger + ⭐) -->
+  <div class="legend">
+    <div class="row"><span class="swatch pizza"></span>Pizza</div>
+    <div class="row"><span class="swatch museum"></span>Museer</div>
+    <div class="row"><span class="swatch bar"></span>Barer</div>
+    <div class="row"><span class="swatch view"></span>Utsikt</div>
+    <div class="row"><span class="swatch beach"></span>Strender</div>
+    <div class="row"><span class="swatch center"></span>Sentrum</div>
+    <div class="row">⭐ Ditt punkt</div>
+  </div>
+
+  <!-- Leaflet JS -->
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    crossorigin=""
+  ></script>
+  <script>
+    // --- Data ---
+    const points = [
+      // 🍕 Pizza
+      {name:"L'Antica Pizzeria da Michele", lat:40.8497183, lon:14.2632902, cat:"pizza",  notes:"Via Cesare Sersale 1"},
+      {name:"Gino Sorbillo (Via dei Tribunali)",               lat:40.85039,   lon:14.25534,   cat:"pizza",  notes:"Via dei Tribunali 32"},
+      {name:"50 Kalò",                                        lat:40.82886,   lon:14.21871,   cat:"pizza",  notes:"Piazza Sannazaro 201"},
+      {name:"Starita a Materdei",                              lat:40.85592,   lon:14.24639,   cat:"pizza",  notes:"Via Materdei 27/28"},
+
+      // 🏛 Museer
+      {name:"MANN – Museo Archeologico Nazionale di Napoli",   lat:40.85361,   lon:14.25056,   cat:"museum", notes:"Piazza Museo 19"},
+      {name:"Museo e Real Bosco di Capodimonte",               lat:40.86700,   lon:14.250555,  cat:"museum", notes:"Via Miano, 2"},
+      {name:"Museo Cappella Sansevero",                        lat:40.84924,   lon:14.25470,   cat:"museum", notes:"Via Francesco de Sanctis 19/21"},
+      {name:"Certosa e Museo di San Martino",                  lat:40.84342,   lon:14.24126,   cat:"museum", notes:"Largo San Martino 5"},
+
+      // 📍 Sentrum
+      {name:"Piazza del Plebiscito",                           lat:40.83484,   lon:14.24728,   cat:"center", notes:"Plassen ved Det kongelige slott"},
+      {name:"Piazza del Gesù Nuovo (Centro Storico)",          lat:40.84781,   lon:14.25153,   cat:"center", notes:"Hjerte av Spaccanapoli"},
+
+      // 🍸 Barer
+      {name:"L'Antiquario",                                    lat:40.84086,   lon:14.24369,   cat:"bar",    notes:"Speakeasy-stil cocktails (Chiaia)"},
+      {name:"Gran Caffè Gambrinus",                            lat:40.83553,   lon:14.24794,   cat:"bar",    notes:"Historisk kafé for espresso & spritz"},
+      {name:"Piazza Bellini Bar Scene",                        lat:40.84979,   lon:14.25267,   cat:"bar",    notes:"Flere barer & uteserveringer"},
+
+      // 👀 Utsikt
+      {name:"Belvedere San Martino",                           lat:40.84362,   lon:14.24061,   cat:"view",   notes:"Utsikt over hele Napoli-bukta"},
+      {name:"Castel Sant'Elmo",                                lat:40.84262,   lon:14.23878,   cat:"view",   notes:"Festning med panorama"},
+      {name:"Lungomare Caracciolo (promenade)",                lat:40.83091,   lon:14.23775,   cat:"view",   notes:"Kveldstur langs havet"},
+
+      // 🏖 Strender
+      {name:"Bagno Elena",                                     lat:40.81869,   lon:14.21977,   cat:"beach",  notes:"Bystrand (betalende lido) i Posillipo"},
+      {name:"Spiaggia della Gaiola",                           lat:40.79377,   lon:14.19459,   cat:"beach",  notes:"Marint reservat – klart vann"},
+      {name:"Riva Fiorita",                                    lat:40.80676,   lon:14.20565,   cat:"beach",  notes:"Liten bukt; best i rolig sjø"},
+
+      // ⭐ Ditt punkt
+      {name:"Via dei Carrozzieri a Monteoliveto, 13 (ditt punkt)", lat:40.84600, lon:14.25200, cat:"custom", notes:"Centro Storico"}
+    ];
+
+    // --- Kart ---
+    const map = L.map('map', { center: [40.8465, 14.2525], zoom: 13, zoomControl: true });
+
+    // OSM-tiles
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+    }).addTo(map);
+
+    // Lag/grupper
+    const layers = {
+      pizza:  L.layerGroup(),
+      museum: L.layerGroup(),
+      bar:    L.layerGroup(),
+      view:   L.layerGroup(),
+      beach:  L.layerGroup(),
+      center: L.layerGroup(),
+      custom: L.layerGroup()
+    };
+
+    // Stil for fargede sirkler
+    const styleByCat = (cat) => {
+      if (cat === 'pizza')   return { radius: 8, color: '#902222', fillColor: '#d83a3a', fillOpacity: 0.9, weight: 1.25 };
+      if (cat === 'museum')  return { radius: 8, color: '#1f3fa8', fillColor: '#2f70ff', fillOpacity: 0.9, weight: 1.25 };
+      if (cat === 'bar')     return { radius: 8, color: '#5e3377', fillColor: '#9b59b6', fillOpacity: 0.9, weight: 1.25 };
+      if (cat === 'view')    return { radius: 8, color: '#0f6a5f', fillColor: '#16a085', fillOpacity: 0.9, weight: 1.25 };
+      if (cat === 'beach')   return { radius: 8, color: '#a16b00', fillColor: '#f39c12', fillOpacity: 0.9, weight: 1.25 };
+      if (cat === 'center')  return { radius: 8, color: '#333',    fillColor: '#777',    fillOpacity: 0.9, weight: 1.25 };
+      return { radius: 9, color: '#a07400', fillColor: '#ffd04d', fillOpacity: 1, weight: 1.5 };
+    };
+
+    // Popup med veibeskrivelser
+    function popupHTML(p) {
+      const gmaps = `https://www.google.com/maps?q=${p.lat},${p.lon}`;
+      const amaps = `http://maps.apple.com/?daddr=${p.lat},${p.lon}&dirflg=d`;
+      const labels = { pizza:"🍕 Pizza", museum:"🏛️ Museum", bar:"🍸 Bar", view:"👀 Utsikt", beach:"🏖 Strand", center:"📍 Sentrum", custom:"⭐ Ditt punkt" };
+      return `
+        <div style="font: 14px system-ui,sans-serif; max-width: 260px;">
+          <div style="font-weight:600;">${p.name}</div>
+          <div style="opacity:.8; margin-top:2px;">${p.notes || ""}</div>
+          <div style="opacity:.75; margin-top:6px;">Kategori: ${labels[p.cat] || p.cat}</div>
+          <div style="margin-top:6px;">
+            <a href="${gmaps}" target="_blank" rel="noopener" style="margin-right:8px;">Google Maps</a>
+            <a href="${amaps}" target="_blank" rel="noopener">Apple Maps</a>
+          </div>
+        </div>`;
+    }
+
+    const bounds = [];
+    points.forEach(p => {
+      const pos = [p.lat, p.lon];
+      bounds.push(pos);
+      const html = popupHTML(p);
+      if (p.cat === 'custom') {
+        const starIcon = L.divIcon({ className: 'star-pin', html: '⭐', iconSize: [20, 20] });
+        L.marker(pos, { icon: starIcon }).bindPopup(html).addTo(layers.custom);
+      } else {
+        L.circleMarker(pos, styleByCat(p.cat)).bindPopup(html).addTo(layers[p.cat]);
+      }
+    });
+
+    // Legg til lag i kartet
+    Object.values(layers).forEach(Layer => Layer.addTo(map));
+
+    // Lagkontroll (bare lag, ingen ekstra forklaring)
+    L.control.layers(
+      null,
+      {
+        "🍕 Pizza": layers.pizza,
+        "🏛️ Museer": layers.museum,
+        "🍸 Barer": layers.bar,
+        "👀 Utsikt": layers.view,
+        "🏖 Strender": layers.beach,
+        "📍 Sentrum": layers.center,
+        "⭐ Ditt punkt": layers.custom
+      },
+      { collapsed: false }
+    ).addTo(map);
+
+    // Zoom til alle
+    if (bounds.length) map.fitBounds(bounds, { padding: [20, 20] });
+
+    // --- Geolokasjon: “Finn min posisjon” ---
+    const locateBtn = document.getElementById('locate');
+    let youMarker = null, youCircle = null;
+
+    function clearYou() {
+      if (youMarker) { map.removeLayer(youMarker); youMarker = null; }
+      if (youCircle) { map.removeLayer(youCircle); youCircle = null; }
+    }
+
+    function locateOnce() {
+      if (!navigator.geolocation) {
+        alert("Nettleseren støtter ikke geolokasjon.");
+        return;
+      }
+      locateBtn.disabled = true;
+      locateBtn.textContent = "🔎 Søker posisjon…";
+
+      map.locate({ setView: false, enableHighAccuracy: true, timeout: 10000, maximumAge: 0 });
+
+      map.once('locationfound', (e) => {
+        clearYou();
+        // Markør + nøyaktighetssirkel
+        youMarker = L.marker(e.latlng).bindPopup("Du er her");
+        youCircle = L.circle(e.latlng, { radius: e.accuracy, color: '#0b7285', fillColor: '#74c0fc', fillOpacity: 0.2, weight: 1 });
+        youMarker.addTo(map).openPopup();
+        youCircle.addTo(map);
+        map.flyTo(e.latlng, Math.max(15, map.getZoom()));
+        locateBtn.disabled = false;
+        locateBtn.textContent = "📍 Finn min posisjon";
+      });
+
+      map.once('locationerror', (err) => {
+        alert("Kunne ikke hente posisjon: " + err.message + "\nTips: Sjekk at nettleseren har lov til å bruke posisjon.");
+        locateBtn.disabled = false;
+        locateBtn.textContent = "📍 Finn min posisjon";
+      });
+    }
+
+    locateBtn.addEventListener('click', locateOnce);
+  </script>
+</body>
+</html>
